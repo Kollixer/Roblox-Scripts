@@ -91,59 +91,170 @@ task.spawn(function()
 end)
 
 --============================================================--
---  TAB 2 • MISC                                      --
+--  TAB 2 • MISC                                              --
 --============================================================--
 
--- 🟩 Noclip
+-- ─── State flags ─────────────────────────────────────────────
+local noclipEnabled   = false
+local ijEnabled       = false
+local flyEnabled      = false
+local speedValue      = 16       -- default walkspeed
+
+-- ─── Character refresh (runs on spawn & respawn) ────────────
+local function reapplyMisc()
+    if noclipEnabled then startNoclip()  end
+    if ijEnabled     then startInfJump() end
+    if flyEnabled    then startFly()     end
+    humanoid.WalkSpeed = speedValue
+end
+
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    character = player.Character
+    humanoid  = character:WaitForChild("Humanoid")
+    rootPart  = character:WaitForChild("HumanoidRootPart")
+    reapplyMisc()
+end)
+
+-- ─── Noclip ─────────────────────────────────────────────────
 local noclipConn
-HacksTab:CreateToggle({Name="Noclip",CurrentValue=false,Callback=function(on)
-    if on then
-        noclipConn = RunService.Stepped:Connect(function()
-            for _,p in ipairs(character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end
-        end)
-    elseif noclipConn then noclipConn:Disconnect(); noclipConn=nil; for _,p in ipairs(character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end end
-end})
-
--- 🟦 Infinite Jump
-local ijConn
-HacksTab:CreateToggle({Name="Infinite Jump",CurrentValue=false,Callback=function(on)
-    if on then ijConn=UIS.JumpRequest:Connect(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) elseif ijConn then ijConn:Disconnect(); ijConn=nil end
-end})
-
--- 🟥 WalkSpeed
-HacksTab:CreateSlider({Name="WalkSpeed",Range={1,100},Increment=1,CurrentValue=humanoid.WalkSpeed,Callback=function(v) humanoid.WalkSpeed=v end})
-
--- 🟨 Fly
-local flyConn; local flying=false; local flySpeed=50
-local function startFly()
-    flying=true; humanoid.PlatformStand=true
-    flyConn = RunService.RenderStepped:Connect(function()
-        local cam=workspace.CurrentCamera; local dir=Vector3.zero
-        if UIS:IsKeyDown(Enum.KeyCode.W) then dir+=cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then dir-=cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then dir-=cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then dir+=cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.Space) then dir+=Vector3.new(0,1,0) end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir-=Vector3.new(0,1,0) end
-        if dir.Magnitude>0 then rootPart.Velocity=dir.Unit*flySpeed else rootPart.Velocity=Vector3.zero end
+function startNoclip()
+    stopNoclip()
+    noclipConn = RunService.Stepped:Connect(function()
+        for _, p in ipairs(character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
     end)
 end
-local function stopFly() flying=false; humanoid.PlatformStand=false; rootPart.Velocity=Vector3.zero; if flyConn then flyConn:Disconnect(); flyConn=nil end end
-HacksTab:CreateToggle({Name="Fly (Patched)",CurrentValue=false,Callback=function(on) if on then startFly() else stopFly() end end})
+function stopNoclip()
+    if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+    for _, p in ipairs(character:GetDescendants()) do
+        if p:IsA("BasePart") then p.CanCollide = true end
+    end
+end
+HacksTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Callback = function(on)
+        noclipEnabled = on
+        if on then startNoclip() else stopNoclip() end
+    end
+})
 
--- 🟩 X‑Ray
-local xrayChildConn; local visibleStones={}
-local function setStone(part,val) if part:IsA("BasePart") and part.Name=="Stone" and part.Transparency~=val then part.Transparency=val; visibleStones[part]=val>0 and true or nil end end
-HacksTab:CreateToggle({Name="X‑Ray",CurrentValue=false,Callback=function(on)
-    local mine=workspace:FindFirstChild("Mine")
-    if on then if mine then for _,p in ipairs(mine:GetChildren()) do setStone(p,0.8) end; xrayChildConn=mine.ChildAdded:Connect(function(c) setStone(c,0.8) end) end; Rayfield:Notify({Title="X‑Ray ON",Content="Stone at 0.8",Duration=3})
-    else if xrayChildConn then xrayChildConn:Disconnect(); xrayChildConn=nil end; for p in pairs(visibleStones) do if p:IsDescendantOf(workspace) then p.Transparency=0 end end; visibleStones={}; Rayfield:Notify({Title="X‑Ray OFF",Content="Stone reset",Duration=3}) end end})
+-- ─── Infinite Jump ──────────────────────────────────────────
+local ijConn
+function startInfJump()
+    stopInfJump()
+    ijConn = UIS.JumpRequest:Connect(function()
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+end
+function stopInfJump()
+    if ijConn then ijConn:Disconnect() ijConn = nil end
+end
+HacksTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Callback = function(on)
+        ijEnabled = on
+        if on then startInfJump() else stopInfJump() end
+    end
+})
 
--- 🟧 Fullbright
-local origAmb,origOut,origBr=Lighting.Ambient,Lighting.OutdoorAmbient,Lighting.Brightness; local fbLight
-HacksTab:CreateToggle({Name="Fullbright",CurrentValue=false,Callback=function(on)
-    if on then Lighting.Ambient=Color3.new(1,1,1); Lighting.OutdoorAmbient=Color3.new(1,1,1); Lighting.Brightness=3; if not fbLight or not fbLight.Parent then fbLight=Instance.new("PointLight"); fbLight.Brightness=1; fbLight.Range=30; fbLight.Parent=rootPart end; Rayfield:Notify({Title="Fullbright ON",Content="Light on",Duration=3})
-    else if fbLight then fbLight:Destroy(); fbLight=nil end; Lighting.Ambient,Lighting.OutdoorAmbient,Lighting.Brightness=origAmb,origOut,origBr; Rayfield:Notify({Title="Fullbright OFF",Content="Light off",Duration=3}) end end})
+-- ─── WalkSpeed ──────────────────────────────────────────────
+HacksTab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {1, 100},
+    Increment = 1,
+    CurrentValue = 16,
+    Callback = function(v)
+        speedValue = v
+        humanoid.WalkSpeed = v
+    end
+})
+
+-- ─── Fly ────────────────────────────────────────────────────
+local flyConn
+function startFly()
+    stopFly()
+    humanoid.PlatformStand = true
+    flyConn = RunService.RenderStepped:Connect(function()
+        local cam = workspace.CurrentCamera
+        local dir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W)          then dir += cam.CFrame.LookVector  end
+        if UIS:IsKeyDown(Enum.KeyCode.S)          then dir -= cam.CFrame.LookVector  end
+        if UIS:IsKeyDown(Enum.KeyCode.A)          then dir -= cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D)          then dir += cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.Space)      then dir += Vector3.new(0, 1, 0)   end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl)then dir -= Vector3.new(0, 1, 0)   end
+        rootPart.Velocity = (dir.Magnitude > 0) and dir.Unit * 50 or Vector3.zero
+    end)
+end
+function stopFly()
+    if flyConn then flyConn:Disconnect() flyConn = nil end
+    humanoid.PlatformStand = false
+    rootPart.Velocity      = Vector3.zero
+end
+HacksTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Callback = function(on)
+        flyEnabled = on
+        if on then startFly() else stopFly() end
+    end
+})
+
+-- ─── X‑Ray ─────────────────────────────────────
+local xrayChildConn, visibleStones = {}, {}
+local function setStone(part, val)
+    if part:IsA("BasePart") and part.Name == "Stone" then
+        part.Transparency = val
+        visibleStones[part] = val > 0 and true or nil
+    end
+end
+HacksTab:CreateToggle({
+    Name = "X‑Ray",
+    CurrentValue = false,
+    Callback = function(on)
+        local mine = workspace:FindFirstChild("Mine")
+        if on then
+            if mine then
+                for _, p in ipairs(mine:GetChildren()) do setStone(p, 0.8) end
+                xrayChildConn = mine.ChildAdded:Connect(function(c) setStone(c, 0.8) end)
+            end
+        else
+            if xrayChildConn then xrayChildConn:Disconnect(); xrayChildConn = nil end
+            for p in pairs(visibleStones) do
+                if p:IsDescendantOf(workspace) then p.Transparency = 0 end
+            end
+            visibleStones = {}
+        end
+    end
+})
+
+-- ─── Fullbright ────────────────────────────────
+local origAmb, origOut, origBr = Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness
+HacksTab:CreateToggle({
+    Name = "Fullbright",
+    CurrentValue = false,
+    Callback = function(on)
+        if on then
+            Lighting.Ambient = Color3.new(1, 1, 1)
+            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+            Lighting.Brightness = 3
+            if not fbLight or not fbLight.Parent then
+                fbLight = Instance.new("PointLight")
+                fbLight.Brightness = 1
+                fbLight.Range      = 30
+            end
+            fbLight.Parent = rootPart
+        else
+            if fbLight then fbLight:Destroy(); fbLight = nil end
+            Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness = origAmb, origOut, origBr
+        end
+    end
+})
+
 
 --============================================================--
 --  TAB 3 • ORE ESP                                           --
@@ -171,4 +282,5 @@ for _, ore in ipairs(oreList) do
         if on then espActive[ore]=true; enableOreESP(ore) else espActive[ore]=false; disableOreESP(ore) end
     end})
 end
+
 --loadstring(game:HttpGet('https://raw.githubusercontent.com/Kollixer/Roblox-Scripts/refs/heads/main/AzureMines.lua'))()
