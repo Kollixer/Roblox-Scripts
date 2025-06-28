@@ -171,3 +171,4 @@ for _, ore in ipairs(oreList) do
         if on then espActive[ore]=true; enableOreESP(ore) else espActive[ore]=false; disableOreESP(ore) end
     end})
 end
+--loadstring(game:HttpGet('https://raw.githubusercontent.com/Kollixer/Roblox-Scripts/refs/heads/main/AzureMines.lua'))()
