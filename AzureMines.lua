@@ -233,31 +233,36 @@ HacksTab:CreateToggle({
 })
 
 -- ─── Fullbright ────────────────────────────────
+
 local origAmb, origOut, origBr = Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness
 local origFogStart, origFogEnd = Lighting.FogStart, Lighting.FogEnd
+local fullbrightConn
 
 HacksTab:CreateToggle({
     Name = "Fullbright",
     CurrentValue = false,
     Callback = function(on)
         if on then
-            -- Fullbright settings
-            Lighting.Ambient = Color3.new(1, 1, 1)
-            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-            Lighting.Brightness = 3
-            -- Remove fog
-            Lighting.FogStart = 1e9
-            Lighting.FogEnd = 1e9
-            -- Add point light
+            -- Add point light if missing
             if not fbLight or not fbLight.Parent then
                 fbLight = Instance.new("PointLight")
                 fbLight.Brightness = 1
                 fbLight.Range = 30
             end
             fbLight.Parent = rootPart
+
+            -- Constantly enforce fullbright and remove fog
+            fullbrightConn = RunService.RenderStepped:Connect(function()
+                Lighting.Ambient = Color3.new(1,1,1)
+                Lighting.OutdoorAmbient = Color3.new(1,1,1)
+                Lighting.Brightness = 3
+                Lighting.FogStart = 1e9
+                Lighting.FogEnd = 1e9
+            end)
         else
             -- Restore original settings
             if fbLight then fbLight:Destroy(); fbLight = nil end
+            if fullbrightConn then fullbrightConn:Disconnect(); fullbrightConn = nil end
             Lighting.Ambient = origAmb
             Lighting.OutdoorAmbient = origOut
             Lighting.Brightness = origBr
@@ -266,6 +271,15 @@ HacksTab:CreateToggle({
         end
     end
 })
+
+
+HacksTab:CreateButton({
+    Name = "Infinite Yield",
+    Callback = function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+    end
+})
+
 
 --============================================================--
 --  TAB 3 • ORE ESP                                           --
