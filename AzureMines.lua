@@ -283,4 +283,220 @@ for _, ore in ipairs(oreList) do
     end})
 end
 
+--============================================================--
+--  TAB 4 • MOB TELEPORT                                      --
+--============================================================--
+local MobTab = Window:CreateTab("Mob TP", 4483362458)
+
+local mobList = {"Zombie", "Zwambie", "Skeleton", "Inferno", "Void Guardian", "Festive"}
+local mobCounts, mobLabels = {}, {}
+
+for _, mob in ipairs(mobList) do
+    mobCounts[mob] = 0
+    mobLabels[mob] = MobTab:CreateParagraph({Title = mob, Content = "Count: 0"})
+
+    MobTab:CreateButton({
+        Name = "Teleport to " .. mob,
+        Callback = function()
+            local ents = workspace:FindFirstChild("Entities")
+            if not ents then
+                return Rayfield:Notify({Title="Error",Content="Entities folder not found",Duration=3})
+            end
+            local prospects = {}
+            for _, inst in ipairs(ents:GetChildren()) do
+                if inst.Name == mob then
+                    local targetPart = inst:FindFirstChild("HumanoidRootPart") or inst:FindFirstChild("Head")
+                    if targetPart then
+                        table.insert(prospects, targetPart)
+                    end
+                end
+            end
+            if #prospects == 0 then
+                return Rayfield:Notify({Title="Not Found",Content=mob.." not found",Duration=3})
+            end
+            local target = prospects[math.random(1, #prospects)]
+            rootPart.CFrame = CFrame.new(target.Position + Vector3.new(0,5,0))
+            Rayfield:Notify({Title="Teleported",Content="Above "..mob,Duration=3})
+        end
+    })
+end
+
+task.spawn(function()
+    while true do
+        local ents = workspace:FindFirstChild("Entities")
+        if ents then
+            local temp = {}
+            for _, mob in ipairs(mobList) do temp[mob] = 0 end
+            for _, inst in ipairs(ents:GetChildren()) do
+                if temp[inst.Name] ~= nil then temp[inst.Name] += 1 end
+            end
+            for mob, c in pairs(temp) do
+                if c ~= mobCounts[mob] then
+                    mobLabels[mob]:Set({Title=mob, Content="Count: "..c})
+                    mobCounts[mob] = c
+                end
+            end
+        end
+        task.wait(2)
+    end
+end)
+
+--============================================================--
+--  TAB 5 • TELEPORTS                                         --
+--============================================================--
+local TP_Tab = Window:CreateTab("Teleports", 4483362458)
+
+-- List of named teleports with coordinates
+local tpLocations = {
+    ["Trading Post"]          = Vector3.new(-8,    5002,   192),
+    ["Billy's Swag Shop"]     = Vector3.new(192,   5003,   171),
+    ["Merchant"]              = Vector3.new(-33,   5005,   100),
+    ["Ore Museum"]            = Vector3.new(100,   5003,   -37),
+    ["Secret"]                = Vector3.new(4,     5051,   -98),
+    ["Scary Mineshaft"]       = Vector3.new(210,   1352,    90),
+    ["Azure Mineshaft"]       = Vector3.new(210,  -1048,    90),
+    ["Underworld Mineshaft"]  = Vector3.new(369708, -7054,   90),
+    ["Radioactive Mineshaft"] = Vector3.new(369708, -13054,  90),
+    ["Dreamscape Mineshaft"]  = Vector3.new(369708, -19054,  90),
+	["Private Mine"]  = Vector3.new(-161, 5000, 21),
+    ["Surface"]     = Vector3.new(48,    5002,   162), 
+}
+
+-- Create teleport buttons
+for name, pos in pairs(tpLocations) do
+    TP_Tab:CreateButton({
+        Name = "Teleport to " .. name,
+        Callback = function()
+            rootPart.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
+            Rayfield:Notify({Title="Teleported", Content="You are at "..name, Duration=3})
+        end
+    })
+end
+
+--============================================================--
+--  TAB 5 • AUTO
+--============================================================--
+local AutoTab = Window:CreateTab("Auto", 4483362458)
+
+local autoCoinEnabled = false
+local autoXPEnabled   = false
+local tpInterval      = 1 -- default 1 second
+
+-- Utility: Find your tycoon
+local function getMyTycoon()
+    local tycoonsFolder = workspace:FindFirstChild("Tycoons")
+    if not tycoonsFolder then return nil end
+    for _, tycoon in ipairs(tycoonsFolder:GetChildren()) do
+        local owner = tycoon:FindFirstChild("Owner")
+        if owner and owner.Value == player then
+            return tycoon
+        end
+    end
+    return nil
+end
+
+-- Teleport function
+local function teleportToPad(pad)
+    if pad and rootPart then
+        local originalPos = rootPart.CFrame
+        rootPart.CFrame = pad.CFrame + Vector3.new(0,3,0)
+        task.wait(0.05) -- brief pause to register teleport
+        rootPart.CFrame = originalPos
+    end
+end
+
+-- Auto collect loop
+local function startAutoCollect(type)
+    task.spawn(function()
+        while (type == "Coin" and autoCoinEnabled) or (type == "XP" and autoXPEnabled) do
+            local tycoon = getMyTycoon()
+            if tycoon then
+                local items = tycoon:FindFirstChild("Items")
+                if items then
+                    local pad
+                    if type == "Coin" then
+                        local mine = items:FindFirstChild("Mine")
+                        if mine then pad = mine:FindFirstChild("Pad") end
+                    elseif type == "XP" then
+                        local data = items:FindFirstChild("Data")
+                        if data then pad = data:FindFirstChild("Pad") end
+                    end
+                    if pad then teleportToPad(pad) end
+                end
+            end
+            task.wait(tpInterval)
+        end
+    end)
+end
+
+-- ─── Auto Collect Coins ─────────────────────────────
+AutoTab:CreateToggle({
+    Name = "Auto Collect Coins",
+    CurrentValue = false,
+    Callback = function(on)
+        autoCoinEnabled = on
+        if on then startAutoCollect("Coin") end
+    end
+})
+
+-- ─── Auto Collect XP ───────────────────────────────
+AutoTab:CreateToggle({
+    Name = "Auto Collect XP",
+    CurrentValue = false,
+    Callback = function(on)
+        autoXPEnabled = on
+        if on then startAutoCollect("XP") end
+    end
+})
+
+-- ─── Interval Slider ───────────────────────────────
+AutoTab:CreateInput({
+    Name = "TP Interval (seconds)",
+    PlaceholderText = "Enter a number (e.g., 1)",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(text)
+        local num = tonumber(text)
+        if num and num > 0 then
+            tpInterval = num
+            Rayfield:Notify({
+                Title = "Interval Set",
+                Content = "Teleport interval set to "..tpInterval.." seconds",
+                Duration = 2
+            })
+        else
+            Rayfield:Notify({
+                Title = "Invalid Value",
+                Content = "Please enter a number greater than 0",
+                Duration = 2
+            })
+        end
+    end
+})
+
+-- Anti-AFK Toggle
+local antiAFKEnabled = false
+local antiAFKConn
+
+AutoTab:CreateToggle({
+    Name = "Anti-AFK",
+    CurrentValue = false,
+    Callback = function(on)
+        antiAFKEnabled = on
+        if on then
+            local vu = game:GetService("VirtualUser")
+            antiAFKConn = player.Idled:Connect(function()
+                vu:Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+                task.wait(0.1)
+                vu:Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+            end)
+        else
+            if antiAFKConn then
+                antiAFKConn:Disconnect()
+                antiAFKConn = nil
+            end
+        end
+    end
+})
+
+
 --loadstring(game:HttpGet('https://raw.githubusercontent.com/Kollixer/Roblox-Scripts/refs/heads/main/AzureMines.lua'))()
