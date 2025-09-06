@@ -234,27 +234,38 @@ HacksTab:CreateToggle({
 
 -- ─── Fullbright ────────────────────────────────
 local origAmb, origOut, origBr = Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness
+local origFogStart, origFogEnd = Lighting.FogStart, Lighting.FogEnd
+
 HacksTab:CreateToggle({
     Name = "Fullbright",
     CurrentValue = false,
     Callback = function(on)
         if on then
+            -- Fullbright settings
             Lighting.Ambient = Color3.new(1, 1, 1)
             Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
             Lighting.Brightness = 3
+            -- Remove fog
+            Lighting.FogStart = 1e9
+            Lighting.FogEnd = 1e9
+            -- Add point light
             if not fbLight or not fbLight.Parent then
                 fbLight = Instance.new("PointLight")
                 fbLight.Brightness = 1
-                fbLight.Range      = 30
+                fbLight.Range = 30
             end
             fbLight.Parent = rootPart
         else
+            -- Restore original settings
             if fbLight then fbLight:Destroy(); fbLight = nil end
-            Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.Brightness = origAmb, origOut, origBr
+            Lighting.Ambient = origAmb
+            Lighting.OutdoorAmbient = origOut
+            Lighting.Brightness = origBr
+            Lighting.FogStart = origFogStart
+            Lighting.FogEnd = origFogEnd
         end
     end
 })
-
 
 --============================================================--
 --  TAB 3 • ORE ESP                                           --
