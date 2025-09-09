@@ -1,5 +1,5 @@
 --============================================================--
---  AZURE MINES • FULL GUI SCRIPT - Fully open source
+--  AZURE MINES • FULL GUI SCRIPT    
 --============================================================--
 
 -- 1️⃣  LOAD RAYFIELD
@@ -280,6 +280,29 @@ HacksTab:CreateButton({
     end
 })
 
+-- Join Meme World
+HacksTab:CreateButton({
+    Name = "Join Meme World",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(611209665, game.Players.LocalPlayer)
+    end
+})
+
+-- Join Staff Room
+HacksTab:CreateButton({
+    Name = "Join Staff Room",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(606762872, game.Players.LocalPlayer)
+    end
+})
+
+-- Join Staff Room
+HacksTab:CreateButton({
+    Name = "Join RESTOREBOT 4000",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(607576685, game.Players.LocalPlayer)
+    end
+})
 
 --============================================================--
 --  TAB 3 • ORE ESP                                           --
