@@ -1,5 +1,5 @@
 --============================================================--
---  AZURE MINES • FULL GUI SCRIPT    
+--  AZURE MINES • FULL GUI SCRIPT - Fully open source
 --============================================================--
 
 -- 1️⃣  LOAD RAYFIELD
@@ -520,6 +520,63 @@ AutoTab:CreateToggle({
                 antiAFKConn = nil
             end
         end
+    end
+})
+
+--============================================================--
+--  TAB 6 • GUI
+--============================================================--
+local GUITab = Window:CreateTab("GUI", 4483362458)
+
+-- Marketplace Button
+GUITab:CreateButton({
+    Name = "Marketplace",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+        local screenGui = playerGui:WaitForChild("ScreenGui") -- replace with actual ScreenGui name
+        local imageLabel = screenGui:WaitForChild("Marketplace") -- replace with actual ImageLabel name
+        screenGui.Enabled = true
+        imageLabel.Visible = true
+    end
+})
+
+-- Storage Button
+GUITab:CreateButton({
+    Name = "Storage",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+        local screenGui = playerGui:WaitForChild("ScreenGui")
+        local imageLabel = screenGui:WaitForChild("Storage")
+        screenGui.Enabled = true
+        imageLabel.Visible = true
+    end
+})
+
+-- Pickaxe Button
+GUITab:CreateButton({
+    Name = "Pickaxe",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+        local screenGui = playerGui:WaitForChild("ScreenGui")
+        local imageLabel = screenGui:WaitForChild("Forge")
+        screenGui.Enabled = true
+        imageLabel.Visible = true
+    end
+})
+
+-- Furnace Button
+GUITab:CreateButton({
+    Name = "Furnace",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+        local screenGui = playerGui:WaitForChild("ScreenGui")
+        local imageLabel = screenGui:WaitForChild("Furnace")
+        screenGui.Enabled = true
+        imageLabel.Visible = true
     end
 })
 
