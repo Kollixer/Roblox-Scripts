@@ -2,6 +2,8 @@
 --  AZURE MINES • FULL GUI SCRIPT - Free Source, Last updated: 9 - 9 - 2025   
 --===========================================================================--
 
+--Script status: https://amazing-morning-b91.notion.site/Azure-Mines-Script-284f8a0d110b8042a622c5fbddf90a4c
+
 -- 1️⃣  LOAD RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
