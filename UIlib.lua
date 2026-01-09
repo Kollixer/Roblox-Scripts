@@ -1,5 +1,5 @@
--- UIlib.lua — Dogan's UI v3 (Polished, aligned, glow, tabs)
--- UI ONLY. Executor-safe.
+--// UIlib.lua — DoganUI v4 (polished + bugfixed + loading fade)
+--// UI ONLY. Executor-safe.
 
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -10,7 +10,7 @@ local Parent = (gethui and gethui()) or game:GetService("CoreGui")
 local Library = {}
 Library.__index = Library
 
--- ===== Theme =====
+-- ===== THEME =====
 local Theme = {
 	WindowTop = Color3.fromRGB(16, 20, 34),
 	WindowBot = Color3.fromRGB(8, 10, 20),
@@ -18,27 +18,25 @@ local Theme = {
 	CardTop   = Color3.fromRGB(22, 28, 48),
 	CardBot   = Color3.fromRGB(14, 18, 34),
 
-	Stroke    = Color3.fromRGB(90, 120, 255),
-	StrokeSoft= Color3.fromRGB(60, 80, 140),
+	Pill      = Color3.fromRGB(16, 19, 34),
+	PillOn    = Color3.fromRGB(32, 44, 86),
+
+	Control   = Color3.fromRGB(12, 15, 28),
+	Control2  = Color3.fromRGB(20, 26, 45),
 
 	Text      = Color3.fromRGB(242, 244, 252),
 	Muted     = Color3.fromRGB(150, 160, 190),
 
+	StrokeSoft= Color3.fromRGB(60, 80, 140),
 	Accent    = Color3.fromRGB(120, 150, 255),
-	Accent2   = Color3.fromRGB(70, 210, 255),
-
-	Pill      = Color3.fromRGB(18, 22, 40),
-	PillOn    = Color3.fromRGB(34, 46, 86),
-
-	Control   = Color3.fromRGB(14, 18, 32),
-	Control2  = Color3.fromRGB(20, 26, 45),
 
 	Shadow    = Color3.fromRGB(0, 0, 0),
 }
 
+-- ===== UTILS =====
 local function Create(class, props)
 	local inst = Instance.new(class)
-	for k, v in pairs(props) do inst[k] = v end
+	for k,v in pairs(props) do inst[k] = v end
 	return inst
 end
 
@@ -52,48 +50,196 @@ local function Clamp(x, a, b)
 	return x
 end
 
--- A simple “shadow/glow” using 2 layers:
--- 1) a slightly bigger dark frame behind (soft shadow illusion)
--- 2) a soft stroke + gradient (glow vibe without external images)
-local function AddShadow(parent, corner)
-	local shadow = Create("Frame", {
+local function Corner(obj, r)
+	Create("UICorner", { CornerRadius = UDim.new(0, r), Parent = obj })
+end
+
+local function Gradient(obj, top, bot, rot)
+	Create("UIGradient", {
+		Rotation = rot or 90,
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, top),
+			ColorSequenceKeypoint.new(1, bot),
+		}),
+		Parent = obj
+	})
+end
+
+local function Stroke(obj, color, transparency)
+	Create("UIStroke", {
+		Color = color,
+		Thickness = 1,
+		Transparency = transparency or 0.65,
+		Parent = obj
+	})
+end
+
+local function ShadowLayer(parent, cornerRadius, zBelow)
+	-- Simple soft shadow illusion: bigger dark frame behind
+	local sh = Create("Frame", {
 		Name = "Shadow",
 		BackgroundColor3 = Theme.Shadow,
 		BackgroundTransparency = 0.55,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, 18, 1, 18),
 		Position = UDim2.fromOffset(-9, -6),
-		ZIndex = parent.ZIndex - 1,
+		ZIndex = zBelow,
 		Parent = parent,
 	})
-	Create("UICorner", { CornerRadius = UDim.new(0, corner), Parent = shadow })
-	local g = Create("UIGradient", {
+	Corner(sh, cornerRadius)
+	Create("UIGradient", {
 		Rotation = 90,
-		Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(0,0,0)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(0,0,0)),
-		}),
 		Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 0.65),
 			NumberSequenceKeypoint.new(1, 1),
 		}),
-		Parent = shadow
+		Color = ColorSequence.new(Color3.new(0,0,0), Color3.new(0,0,0)),
+		Parent = sh
 	})
-	return shadow
+	return sh
 end
 
--- ====== Window ======
+local function AutoCanvas(scroll, layout, extra)
+	extra = extra or 24
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		scroll.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + extra)
+	end)
+end
+
+-- ===== LOADING OVERLAY =====
+local function CreateLoadingOverlay(gui, titleText)
+	local overlay = Create("Frame", {
+		Name = "LoadingOverlay",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(0,0,0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 1000,
+		Parent = gui,
+	})
+
+	-- subtle vignette gradient
+	local bg = Create("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Theme.WindowTop,
+		BackgroundTransparency = 0.2,
+		BorderSizePixel = 0,
+		ZIndex = 1000,
+		Parent = overlay
+	})
+	Gradient(bg, Theme.WindowTop, Theme.WindowBot, 90)
+
+	local card = Create("Frame", {
+		Size = UDim2.fromOffset(340, 130),
+		Position = UDim2.fromScale(0.5, 0.5),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = Theme.CardTop,
+		BorderSizePixel = 0,
+		ZIndex = 1001,
+		Parent = overlay
+	})
+	Corner(card, 22)
+	Gradient(card, Theme.CardTop, Theme.CardBot, 90)
+	Stroke(card, Theme.StrokeSoft, 0.65)
+
+	local shadow = ShadowLayer(card, 22, 1000)
+	shadow.Parent = overlay
+
+	local title = Create("TextLabel", {
+		Text = titleText or "Loading UI…",
+		Font = Enum.Font.GothamBold,
+		TextSize = 16,
+		TextColor3 = Theme.Text,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -40, 0, 22),
+		Position = UDim2.fromOffset(20, 22),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 1002,
+		Parent = card
+	})
+
+	local sub = Create("TextLabel", {
+		Text = "Please wait",
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextColor3 = Theme.Muted,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -40, 0, 18),
+		Position = UDim2.fromOffset(20, 46),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 1002,
+		Parent = card
+	})
+
+	local barTrack = Create("Frame", {
+		Size = UDim2.new(1, -40, 0, 10),
+		Position = UDim2.fromOffset(20, 84),
+		BackgroundColor3 = Theme.Control2,
+		BorderSizePixel = 0,
+		ZIndex = 1002,
+		Parent = card
+	})
+	Corner(barTrack, 999)
+
+	local bar = Create("Frame", {
+		Size = UDim2.new(0.15, 0, 1, 0),
+		BackgroundColor3 = Theme.Accent,
+		BorderSizePixel = 0,
+		ZIndex = 1003,
+		Parent = barTrack
+	})
+	Corner(bar, 999)
+
+	-- animate bar back/forth
+	local running = true
+	task.spawn(function()
+		local dir = 1
+		while running and overlay.Parent do
+			local target = (dir == 1) and UDim2.new(0.85, 0, 1, 0) or UDim2.new(0.15, 0, 1, 0)
+			Tween(bar, 0.55, { Size = target })
+			dir *= -1
+			task.wait(0.6)
+		end
+	end)
+
+	local api = {}
+	function api:FadeIn()
+		overlay.Visible = true
+		overlay.BackgroundTransparency = 1
+		bg.BackgroundTransparency = 1
+		card.BackgroundTransparency = 1
+		Tween(bg, 0.25, { BackgroundTransparency = 0.25 })
+		Tween(card, 0.25, { BackgroundTransparency = 0 })
+	end
+
+	function api:FadeOut()
+		running = false
+		Tween(bg, 0.25, { BackgroundTransparency = 1 })
+		Tween(card, 0.25, { BackgroundTransparency = 1 })
+		task.delay(0.28, function()
+			if overlay then overlay:Destroy() end
+		end)
+	end
+
+	return api
+end
+
+-- ===== WINDOW =====
 function Library:CreateWindow(cfg)
 	cfg = cfg or {}
 	local Window = {}
 	Window._tabs = {}
-	Window._active = nil
+	Window._activeTab = nil
 
 	local Gui = Create("ScreenGui", {
-		Name = "DogansUI_" .. tostring(math.random(1000, 9999)),
+		Name = "DogansUI_" .. tostring(math.random(1000,9999)),
 		ResetOnSpawn = false,
-		Parent = Parent,
+		Parent = Parent
 	})
+
+	-- loading overlay first (fade in immediately)
+	local loader = CreateLoadingOverlay(Gui, (cfg.Title and (cfg.Title .. " — Loading…")) or "Loading UI…")
+	loader:FadeIn()
 
 	local Main = Create("Frame", {
 		Name = "Main",
@@ -102,37 +248,24 @@ function Library:CreateWindow(cfg)
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundColor3 = Theme.WindowTop,
 		BorderSizePixel = 0,
-		Parent = Gui,
+		ZIndex = 10,
+		Visible = false, -- reveal after loading
+		Parent = Gui
 	})
-	Main.ZIndex = 10
+	Corner(Main, 26)
+	Gradient(Main, Theme.WindowTop, Theme.WindowBot, 90)
+	Stroke(Main, Theme.StrokeSoft, 0.45)
 
-	Create("UICorner", { CornerRadius = UDim.new(0, 26), Parent = Main })
-	Create("UIGradient", {
-		Rotation = 90,
-		Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0, Theme.WindowTop),
-			ColorSequenceKeypoint.new(1, Theme.WindowBot),
-		}),
-		Parent = Main
-	})
+	local shadow = ShadowLayer(Main, 28, 9)
+	shadow.Parent = Gui
 
-	-- shadow behind window
-	AddShadow(Main, 28)
-
-	-- stroke glow-ish
-	Create("UIStroke", {
-		Color = Theme.StrokeSoft,
-		Thickness = 1,
-		Transparency = 0.45,
-		Parent = Main
-	})
-
-	-- Top bar
+	-- ===== TOP BAR =====
 	local Top = Create("Frame", {
 		Name = "Top",
 		Size = UDim2.new(1, 0, 0, 54),
 		BackgroundTransparency = 1,
-		Parent = Main,
+		ZIndex = 11,
+		Parent = Main
 	})
 
 	local Title = Create("TextLabel", {
@@ -140,12 +273,13 @@ function Library:CreateWindow(cfg)
 		Text = cfg.Title or "Dogan's",
 		Font = Enum.Font.GothamBold,
 		TextSize = 16,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		BackgroundTransparency = 1,
 		TextColor3 = Theme.Text,
+		BackgroundTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Left,
 		Position = UDim2.fromOffset(28, 0),
 		Size = UDim2.new(0.5, 0, 1, 0),
-		Parent = Top,
+		ZIndex = 12,
+		Parent = Top
 	})
 
 	local Status = Create("TextLabel", {
@@ -153,55 +287,59 @@ function Library:CreateWindow(cfg)
 		Text = cfg.StatusText or "Status: Ready • Profile: Default",
 		Font = Enum.Font.Gotham,
 		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		BackgroundTransparency = 1,
 		TextColor3 = Theme.Muted,
+		BackgroundTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Right,
 		Position = UDim2.new(0.5, -28, 0, 0),
 		Size = UDim2.new(0.5, 0, 1, 0),
-		Parent = Top,
+		ZIndex = 12,
+		Parent = Top
 	})
 
-	-- Body area
+	-- ===== BODY =====
 	local Body = Create("Frame", {
 		Name = "Body",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(28, 70),
 		Size = UDim2.new(1, -56, 1, -140),
-		Parent = Main,
+		ZIndex = 11,
+		Parent = Main
 	})
 
-	-- Pages container
 	local Pages = Create("Frame", {
 		Name = "Pages",
 		BackgroundTransparency = 1,
 		Size = UDim2.fromScale(1, 1),
-		Parent = Body,
+		ZIndex = 11,
+		Parent = Body
 	})
 
-	-- Bottom bar
+	-- ===== BOTTOM TABS =====
 	local Bottom = Create("Frame", {
 		Name = "Bottom",
 		Size = UDim2.new(1, 0, 0, 62),
 		Position = UDim2.new(0, 0, 1, -62),
 		BackgroundTransparency = 1,
-		Parent = Main,
+		ZIndex = 11,
+		Parent = Main
 	})
 
-	-- bottom divider line (subtle)
 	Create("Frame", {
 		BackgroundColor3 = Theme.StrokeSoft,
-		BackgroundTransparency = 0.75,
+		BackgroundTransparency = 0.78,
 		BorderSizePixel = 0,
 		Size = UDim2.new(1, -56, 0, 1),
 		Position = UDim2.fromOffset(28, 0),
-		Parent = Bottom,
+		ZIndex = 12,
+		Parent = Bottom
 	})
 
 	local TabsBar = Create("Frame", {
 		Name = "TabsBar",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
-		Parent = Bottom,
+		ZIndex = 12,
+		Parent = Bottom
 	})
 
 	local TabsLayout = Create("UIListLayout", {
@@ -209,12 +347,12 @@ function Library:CreateWindow(cfg)
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		VerticalAlignment = Enum.VerticalAlignment.Center,
 		Padding = UDim.new(0, 12),
-		Parent = TabsBar,
+		Parent = TabsBar
 	})
 
-	-- Draggable
+	-- ===== DRAG =====
 	do
-		local dragging, startPos, startMouse
+		local dragging, startMouse, startPos
 		Top.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
 				dragging = true
@@ -224,39 +362,38 @@ function Library:CreateWindow(cfg)
 		end)
 		UIS.InputChanged:Connect(function(input)
 			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-				local delta = input.Position - startMouse
-				Main.Position = startPos + UDim2.fromOffset(delta.X, delta.Y)
+				local d = input.Position - startMouse
+				Main.Position = startPos + UDim2.fromOffset(d.X, d.Y)
 			end
 		end)
 		UIS.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				dragging = false
-			end
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
 		end)
 	end
 
-	-- Resizable (bottom-right grip)
+	-- ===== RESIZE =====
 	do
-		local minW, minH = 720, 420
-		local maxW, maxH = 1400, 900
+		local minW, minH = 740, 430
+		local maxW, maxH = 1500, 950
 
 		local Grip = Create("Frame", {
 			Name = "ResizeGrip",
 			Size = UDim2.fromOffset(20, 20),
 			Position = UDim2.new(1, -22, 1, -22),
 			BackgroundTransparency = 1,
-			Parent = Main,
+			ZIndex = 20,
+			Parent = Main
 		})
 
-		-- little diagonal lines
-		for i = 1, 3 do
+		for i=1,3 do
 			Create("Frame", {
 				BackgroundColor3 = Theme.Muted,
-				BackgroundTransparency = 0.6,
+				BackgroundTransparency = 0.65,
 				BorderSizePixel = 0,
 				Size = UDim2.fromOffset(10, 1),
 				Rotation = 45,
 				Position = UDim2.fromOffset(6 + i, 12 + i),
+				ZIndex = 21,
 				Parent = Grip
 			})
 		end
@@ -269,59 +406,52 @@ function Library:CreateWindow(cfg)
 				startSize = Main.AbsoluteSize
 			end
 		end)
-
 		UIS.InputChanged:Connect(function(input)
 			if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
-				local delta = input.Position - startMouse
-				local w = Clamp(startSize.X + delta.X, minW, maxW)
-				local h = Clamp(startSize.Y + delta.Y, minH, maxH)
+				local d = input.Position - startMouse
+				local w = Clamp(startSize.X + d.X, minW, maxW)
+				local h = Clamp(startSize.Y + d.Y, minH, maxH)
 				Main.Size = UDim2.fromOffset(w, h)
 			end
 		end)
-
 		UIS.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				resizing = false
-			end
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then resizing = false end
 		end)
 	end
 
-	-- Responsive two-column helper (switch to 1 col if narrow)
-	local function ComputeSectionWidth()
+	-- ===== Responsive grid =====
+	local function ComputeCellWidth()
 		local w = Main.AbsoluteSize.X
-		if w < 860 then
-			return UDim2.new(1, 0, 0, 0), 1
+		if w < 880 then
+			return UDim2.new(1, 0, 0, 0) -- 1 column
 		else
-			return UDim2.new(0.5, -9, 0, 0), 2
+			return UDim2.new(0.5, -9, 0, 0) -- 2 columns
 		end
 	end
 
-	-- Create Tab
-	function Window:CreateTab(tabName)
+	-- ===== Tab Creation =====
+	function Window:CreateTab(name)
+		name = tostring(name)
 		local Tab = {}
-		tabName = tostring(tabName)
 
-		-- page scroller
 		local Page = Create("ScrollingFrame", {
-			Name = "Page_" .. tabName,
+			Name = "Page_" .. name,
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
 			ScrollBarThickness = 4,
 			ScrollBarImageColor3 = Theme.StrokeSoft,
-			CanvasSize = UDim2.new(0, 0, 0, 0),
+			CanvasSize = UDim2.new(0,0,0,0),
 			Visible = false,
-			Parent = Pages,
+			ZIndex = 12,
+			Parent = Pages
 		})
 
-		local Pad = Create("UIPadding", {
-			PaddingTop = UDim.new(0, 0),
-			PaddingBottom = UDim.new(0, 12),
-			PaddingLeft = UDim.new(0, 0),
+		Create("UIPadding", {
+			PaddingBottom = UDim.new(0, 18),
 			PaddingRight = UDim.new(0, 10),
 			Parent = Page
 		})
 
-		-- grid layout like your screenshots
 		local Grid = Create("UIGridLayout", {
 			CellPadding = UDim2.fromOffset(18, 18),
 			SortOrder = Enum.SortOrder.LayoutOrder,
@@ -329,101 +459,75 @@ function Library:CreateWindow(cfg)
 		})
 
 		local function RefreshGrid()
-			local cellSize, cols = ComputeSectionWidth()
-			-- height uses AutomaticSize on card itself; grid still needs a base height,
-			-- so we set a reasonable min (cards will expand)
-			Grid.CellSize = UDim2.new(cellSize.X.Scale, cellSize.X.Offset, 0, 160)
+			local cellW = ComputeCellWidth()
+			Grid.CellSize = UDim2.new(cellW.X.Scale, cellW.X.Offset, 0, 160)
 		end
-
 		RefreshGrid()
 		Main:GetPropertyChangedSignal("AbsoluteSize"):Connect(RefreshGrid)
 
-		-- update canvas size
 		Grid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			Page.CanvasSize = UDim2.fromOffset(0, Grid.AbsoluteContentSize.Y + 20)
+			Page.CanvasSize = UDim2.fromOffset(0, Grid.AbsoluteContentSize.Y + 22)
 		end)
 
-		-- tab button (pill)
 		local Btn = Create("TextButton", {
-			Name = "Tab_" .. tabName,
-			Text = tabName,
+			Text = name,
 			Font = Enum.Font.GothamMedium,
 			TextSize = 13,
+			TextColor3 = Theme.Muted,
 			AutoButtonColor = false,
 			BackgroundColor3 = Theme.Pill,
-			TextColor3 = Theme.Muted,
 			Size = UDim2.fromOffset(92, 36),
+			ZIndex = 13,
 			Parent = TabsBar
 		})
-		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Btn })
-		Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = Btn })
-
-		-- hover feel
-		Btn.MouseEnter:Connect(function()
-			if Window._active ~= Tab then
-				Tween(Btn, 0.15, { BackgroundColor3 = Theme.Control2 })
-			end
-		end)
-		Btn.MouseLeave:Connect(function()
-			if Window._active ~= Tab then
-				Tween(Btn, 0.15, { BackgroundColor3 = Theme.Pill })
-			end
-		end)
+		Corner(Btn, 999)
+		Stroke(Btn, Theme.StrokeSoft, 0.78)
 
 		local function Activate()
 			for _, t in ipairs(Window._tabs) do
 				t._page.Visible = false
-				Tween(t._btn, 0.18, { BackgroundColor3 = Theme.Pill })
-				Tween(t._btn, 0.18, { TextColor3 = Theme.Muted })
+				Tween(t._btn, 0.16, { BackgroundColor3 = Theme.Pill, TextColor3 = Theme.Muted })
 			end
-			Window._active = Tab
 			Page.Visible = true
-			Tween(Btn, 0.18, { BackgroundColor3 = Theme.PillOn })
-			Tween(Btn, 0.18, { TextColor3 = Theme.Text })
+			Tween(Btn, 0.16, { BackgroundColor3 = Theme.PillOn, TextColor3 = Theme.Text })
+			Window._activeTab = Tab
 		end
 
+		Btn.MouseEnter:Connect(function()
+			if Window._activeTab ~= Tab then Tween(Btn, 0.12, { BackgroundColor3 = Theme.Control2 }) end
+		end)
+		Btn.MouseLeave:Connect(function()
+			if Window._activeTab ~= Tab then Tween(Btn, 0.12, { BackgroundColor3 = Theme.Pill }) end
+		end)
 		Btn.MouseButton1Click:Connect(Activate)
 
-		-- default first tab
 		if #Window._tabs == 0 then
 			Page.Visible = true
-			Window._active = Tab
 			Btn.BackgroundColor3 = Theme.PillOn
 			Btn.TextColor3 = Theme.Text
+			Window._activeTab = Tab
 		end
 
-		-- SECTION (card)
+		-- ===== Section (Card) =====
 		function Tab:CreateSection(title, subtitle)
+			title = tostring(title)
+			subtitle = subtitle and tostring(subtitle) or nil
+
 			local Card = Create("Frame", {
-				Name = "Card_" .. tostring(title),
+				Name = "Card_" .. title,
 				BackgroundColor3 = Theme.CardTop,
 				BorderSizePixel = 0,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Size = UDim2.new(1, 0, 0, 0),
+				ZIndex = 13,
 				Parent = Page
 			})
-			Card.LayoutOrder = #Page:GetChildren()
+			Corner(Card, 22)
+			Gradient(Card, Theme.CardTop, Theme.CardBot, 90)
+			Stroke(Card, Theme.StrokeSoft, 0.68)
 
-			Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = Card })
-			Create("UIGradient", {
-				Rotation = 90,
-				Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Theme.CardTop),
-					ColorSequenceKeypoint.new(1, Theme.CardBot),
-				}),
-				Parent = Card
-			})
-
-			-- card shadow / depth
-			AddShadow(Card, 22)
-
-			-- subtle glow stroke
-			Create("UIStroke", {
-				Color = Theme.StrokeSoft,
-				Thickness = 1,
-				Transparency = 0.65,
-				Parent = Card
-			})
+			local cardShadow = ShadowLayer(Card, 22, 12)
+			cardShadow.Parent = Page
 
 			Create("UIPadding", {
 				PaddingTop = UDim.new(0, 18),
@@ -433,33 +537,37 @@ function Library:CreateWindow(cfg)
 				Parent = Card
 			})
 
+			local HeaderH = subtitle and 38 or 22
 			local Header = Create("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, subtitle and 38 or 22),
+				Size = UDim2.new(1, 0, 0, HeaderH),
+				ZIndex = 14,
 				Parent = Card
 			})
 
 			Create("TextLabel", {
-				Text = tostring(title),
+				Text = title,
 				Font = Enum.Font.GothamBold,
 				TextSize = 14,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				BackgroundTransparency = 1,
 				TextColor3 = Theme.Text,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
 				Size = UDim2.new(1, 0, 0, 18),
+				ZIndex = 15,
 				Parent = Header
 			})
 
 			if subtitle then
 				Create("TextLabel", {
-					Text = tostring(subtitle),
+					Text = subtitle,
 					Font = Enum.Font.Gotham,
 					TextSize = 12,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Muted,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
 					Position = UDim2.fromOffset(0, 18),
 					Size = UDim2.new(1, 0, 0, 18),
+					ZIndex = 15,
 					Parent = Header
 				})
 			end
@@ -468,6 +576,7 @@ function Library:CreateWindow(cfg)
 				BackgroundTransparency = 1,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Size = UDim2.new(1, 0, 0, 0),
+				ZIndex = 14,
 				Parent = Card
 			})
 
@@ -477,17 +586,16 @@ function Library:CreateWindow(cfg)
 				Parent = Items
 			})
 
-			-- helper: row container
-			local function Row(height)
-				local r = Create("Frame", {
+			local function Row(h)
+				return Create("Frame", {
 					BackgroundTransparency = 1,
-					Size = UDim2.new(1, 0, 0, height or 36),
+					Size = UDim2.new(1, 0, 0, h),
+					ZIndex = 15,
 					Parent = Items
 				})
-				return r
 			end
 
-			-- ===== Controls (UI only) =====
+			-- ===== Controls =====
 
 			function Card:AddButton(opts)
 				opts = opts or {}
@@ -501,15 +609,14 @@ function Library:CreateWindow(cfg)
 					AutoButtonColor = false,
 					BackgroundColor3 = Theme.Control2,
 					Size = UDim2.new(1, 0, 1, 0),
+					ZIndex = 16,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(0, 14), Parent = btn })
-				Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = btn })
+				Corner(btn, 14)
+				Stroke(btn, Theme.StrokeSoft, 0.78)
 
-				btn.MouseEnter:Connect(function() Tween(btn, 0.15, { BackgroundColor3 = Theme.Control }) end)
-				btn.MouseLeave:Connect(function() Tween(btn, 0.15, { BackgroundColor3 = Theme.Control2 }) end)
-				btn.MouseButton1Down:Connect(function() Tween(btn, 0.08, { BackgroundTransparency = 0.2 }) end)
-				btn.MouseButton1Up:Connect(function() Tween(btn, 0.08, { BackgroundTransparency = 0 }) end)
+				btn.MouseEnter:Connect(function() Tween(btn, 0.12, { BackgroundColor3 = Theme.Control }) end)
+				btn.MouseLeave:Connect(function() Tween(btn, 0.12, { BackgroundColor3 = Theme.Control2 }) end)
 
 				btn.MouseButton1Click:Connect(function()
 					if opts.Callback then task.spawn(opts.Callback) end
@@ -520,16 +627,18 @@ function Library:CreateWindow(cfg)
 
 			function Card:AddToggle(opts)
 				opts = opts or {}
-				local r = Row(34)
+				local state = (opts.Default == true)
 
-				local label = Create("TextLabel", {
+				local r = Row(34)
+				Create("TextLabel", {
 					Text = opts.Name or "Toggle",
 					Font = Enum.Font.Gotham,
 					TextSize = 13,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Text,
-					Size = UDim2.new(1, -60, 1, 0),
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Size = UDim2.new(1, -64, 1, 0),
+					ZIndex = 16,
 					Parent = r
 				})
 
@@ -537,48 +646,43 @@ function Library:CreateWindow(cfg)
 					Text = "",
 					AutoButtonColor = false,
 					BackgroundColor3 = Theme.Control2,
-					Size = UDim2.fromOffset(44, 22),
-					Position = UDim2.new(1, -44, 0.5, -11),
+					Size = UDim2.fromOffset(46, 22),
+					Position = UDim2.new(1, -46, 0.5, -11),
+					ZIndex = 16,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = pill })
-				Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = pill })
+				Corner(pill, 999)
+				Stroke(pill, Theme.StrokeSoft, 0.78)
 
 				local knob = Create("Frame", {
 					BackgroundColor3 = Theme.Muted,
 					Size = UDim2.fromOffset(18, 18),
 					Position = UDim2.fromOffset(2, 2),
+					ZIndex = 17,
 					Parent = pill
 				})
-				Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = knob })
-
-				local state = (opts.Default == true)
+				Corner(knob, 999)
 
 				local function set(v, instant)
 					state = v
-					local targetX = state and (44 - 20) or 2
-					local knobColor = state and Theme.Accent or Theme.Muted
-					local pillColor = state and Theme.PillOn or Theme.Control2
-
+					local x = state and (46 - 20) or 2
+					local kc = state and Theme.Accent or Theme.Muted
+					local pc = state and Theme.PillOn or Theme.Control2
 					if instant then
-						knob.Position = UDim2.fromOffset(targetX, 2)
-						knob.BackgroundColor3 = knobColor
-						pill.BackgroundColor3 = pillColor
+						knob.Position = UDim2.fromOffset(x, 2)
+						knob.BackgroundColor3 = kc
+						pill.BackgroundColor3 = pc
 					else
-						Tween(knob, 0.18, { Position = UDim2.fromOffset(targetX, 2), BackgroundColor3 = knobColor })
-						Tween(pill, 0.18, { BackgroundColor3 = pillColor })
+						Tween(knob, 0.16, { Position = UDim2.fromOffset(x, 2), BackgroundColor3 = kc })
+						Tween(pill, 0.16, { BackgroundColor3 = pc })
 					end
-
 					if opts.Callback then task.spawn(opts.Callback, state) end
 				end
 
 				set(state, true)
+				pill.MouseButton1Click:Connect(function() set(not state, false) end)
 
-				pill.MouseButton1Click:Connect(function()
-					set(not state, false)
-				end)
-
-				return { Set = function(_,v) set(v,false) end, Get = function() return state end }
+				return { Get = function() return state end, Set = function(_,v) set(v,false) end }
 			end
 
 			function Card:AddSlider(opts)
@@ -589,26 +693,28 @@ function Library:CreateWindow(cfg)
 
 				local r = Row(46)
 
-				local name = Create("TextLabel", {
+				Create("TextLabel", {
 					Text = opts.Name or "Slider",
 					Font = Enum.Font.Gotham,
 					TextSize = 13,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Text,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
 					Size = UDim2.new(1, -80, 0, 18),
+					ZIndex = 16,
 					Parent = r
 				})
 
-				local valueLabel = Create("TextLabel", {
+				local value = Create("TextLabel", {
 					Text = tostring(val) .. (opts.Suffix or ""),
 					Font = Enum.Font.Gotham,
 					TextSize = 12,
-					TextXAlignment = Enum.TextXAlignment.Right,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Muted,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Right,
 					Size = UDim2.new(0, 80, 0, 18),
 					Position = UDim2.new(1, -80, 0, 0),
+					ZIndex = 16,
 					Parent = r
 				})
 
@@ -617,56 +723,55 @@ function Library:CreateWindow(cfg)
 					BorderSizePixel = 0,
 					Size = UDim2.new(1, 0, 0, 10),
 					Position = UDim2.fromOffset(0, 26),
+					ZIndex = 16,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = track })
+				Corner(track, 999)
 
 				local fill = Create("Frame", {
 					BackgroundColor3 = Theme.Accent,
 					BorderSizePixel = 0,
 					Size = UDim2.new(0, 0, 1, 0),
+					ZIndex = 17,
 					Parent = track
 				})
-				Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = fill })
+				Corner(fill, 999)
 
-				local function setValue(newVal, instant)
-					val = Clamp(math.floor(newVal + 0.5), min, max)
-					local alpha = (val - min) / (max - min)
-					valueLabel.Text = tostring(val) .. (opts.Suffix or "")
-					if instant then
-						fill.Size = UDim2.new(alpha, 0, 1, 0)
-					else
-						Tween(fill, 0.12, { Size = UDim2.new(alpha, 0, 1, 0) })
-					end
+				local function setValue(n, instant)
+					val = Clamp(math.floor(n + 0.5), min, max)
+					local a = (val - min) / (max - min)
+					value.Text = tostring(val) .. (opts.Suffix or "")
+					if instant then fill.Size = UDim2.new(a, 0, 1, 0)
+					else Tween(fill, 0.10, { Size = UDim2.new(a, 0, 1, 0) }) end
 					if opts.Callback then task.spawn(opts.Callback, val) end
 				end
 
 				setValue(val, true)
 
 				local dragging = false
-				local function updateFromX(x)
+				local function update(x)
 					local rel = Clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
 					setValue(min + (max - min) * rel, false)
 				end
 
-				track.InputBegan:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				track.InputBegan:Connect(function(i)
+					if i.UserInputType == Enum.UserInputType.MouseButton1 then
 						dragging = true
-						updateFromX(input.Position.X)
-					end
-				end)
-				UIS.InputChanged:Connect(function(input)
-					if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-						updateFromX(input.Position.X)
-					end
-				end)
-				UIS.InputEnded:Connect(function(input)
-					if input.UserInputType == Enum.UserInputType.MouseButton1 then
-						dragging = false
+						update(i.Position.X)
 					end
 				end)
 
-				return { Set = function(_,v) setValue(v,false) end, Get = function() return val end }
+				UIS.InputChanged:Connect(function(i)
+					if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+						update(i.Position.X)
+					end
+				end)
+
+				UIS.InputEnded:Connect(function(i)
+					if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+				end)
+
+				return { Get=function() return val end, Set=function(_,v) setValue(v,false) end }
 			end
 
 			function Card:AddDropdown(opts)
@@ -676,14 +781,15 @@ function Library:CreateWindow(cfg)
 
 				local r = Row(44)
 
-				local label = Create("TextLabel", {
+				Create("TextLabel", {
 					Text = opts.Name or "Dropdown",
 					Font = Enum.Font.Gotham,
 					TextSize = 13,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Text,
-					Size = UDim2.new(1, -220, 1, 0),
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Size = UDim2.new(1, -230, 1, 0),
+					ZIndex = 16,
 					Parent = r
 				})
 
@@ -694,24 +800,26 @@ function Library:CreateWindow(cfg)
 					TextColor3 = Theme.Text,
 					AutoButtonColor = false,
 					BackgroundColor3 = Theme.Control2,
-					Size = UDim2.fromOffset(210, 30),
-					Position = UDim2.new(1, -210, 0.5, -15),
+					Size = UDim2.fromOffset(220, 30),
+					Position = UDim2.new(1, -220, 0.5, -15),
+					ZIndex = 16,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = box })
-				Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = box })
+				Corner(box, 12)
+				Stroke(box, Theme.StrokeSoft, 0.78)
 
 				local listFrame = Create("Frame", {
 					BackgroundColor3 = Theme.Control,
 					BorderSizePixel = 0,
 					Visible = false,
 					ClipsDescendants = true,
-					Position = UDim2.new(1, -210, 1, -2),
-					Size = UDim2.fromOffset(210, 0),
+					Position = UDim2.new(1, -220, 1, -2),
+					Size = UDim2.fromOffset(220, 0),
+					ZIndex = 30,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = listFrame })
-				Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = listFrame })
+				Corner(listFrame, 12)
+				Stroke(listFrame, Theme.StrokeSoft, 0.78)
 
 				local list = Create("UIListLayout", {
 					Padding = UDim.new(0, 6),
@@ -730,9 +838,9 @@ function Library:CreateWindow(cfg)
 					open = v
 					listFrame.Visible = true
 					local target = open and math.min(#options * 30 + 16, 180) or 0
-					Tween(listFrame, 0.18, { Size = UDim2.fromOffset(210, target) })
-					task.delay(0.2, function()
-						if not open then listFrame.Visible = false end
+					Tween(listFrame, 0.16, { Size = UDim2.fromOffset(220, target) })
+					task.delay(0.20, function()
+						if not open and listFrame then listFrame.Visible = false end
 					end)
 				end
 
@@ -751,11 +859,12 @@ function Library:CreateWindow(cfg)
 						AutoButtonColor = false,
 						BackgroundColor3 = Theme.Control2,
 						Size = UDim2.new(1, 0, 0, 26),
+						ZIndex = 31,
 						Parent = listFrame
 					})
-					Create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = b })
-					b.MouseEnter:Connect(function() Tween(b, 0.12, { BackgroundColor3 = Theme.PillOn }) end)
-					b.MouseLeave:Connect(function() Tween(b, 0.12, { BackgroundColor3 = Theme.Control2 }) end)
+					Corner(b, 10)
+					b.MouseEnter:Connect(function() Tween(b, 0.10, { BackgroundColor3 = Theme.PillOn }) end)
+					b.MouseLeave:Connect(function() Tween(b, 0.10, { BackgroundColor3 = Theme.Control2 }) end)
 					b.MouseButton1Click:Connect(function()
 						setSelected(opt)
 						setOpen(false)
@@ -766,28 +875,26 @@ function Library:CreateWindow(cfg)
 					setOpen(not open)
 				end)
 
-				-- init
 				setSelected(selected)
-
-				return { Set = function(_,v) setSelected(v) end, Get = function() return selected end }
+				return { Get=function() return selected end, Set=function(_,v) setSelected(v) end }
 			end
 
 			function Card:AddKeybind(opts)
 				opts = opts or {}
 				local current = opts.Default or "F"
-				local mode = opts.Mode or "Hold" -- UI only
 				local listening = false
 
 				local r = Row(44)
 
 				Create("TextLabel", {
-					Text = (opts.Name or "Keybind") .. "  ("..mode..")",
+					Text = opts.Name or "Keybind",
 					Font = Enum.Font.Gotham,
 					TextSize = 13,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					BackgroundTransparency = 1,
 					TextColor3 = Theme.Text,
-					Size = UDim2.new(1, -220, 1, 0),
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Size = UDim2.new(1, -230, 1, 0),
+					ZIndex = 16,
 					Parent = r
 				})
 
@@ -798,12 +905,13 @@ function Library:CreateWindow(cfg)
 					TextColor3 = Theme.Text,
 					AutoButtonColor = false,
 					BackgroundColor3 = Theme.Control2,
-					Size = UDim2.fromOffset(210, 30),
-					Position = UDim2.new(1, -210, 0.5, -15),
+					Size = UDim2.fromOffset(220, 30),
+					Position = UDim2.new(1, -220, 0.5, -15),
+					ZIndex = 16,
 					Parent = r
 				})
-				Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = btn })
-				Create("UIStroke", { Color = Theme.StrokeSoft, Thickness = 1, Transparency = 0.75, Parent = btn })
+				Corner(btn, 12)
+				Stroke(btn, Theme.StrokeSoft, 0.78)
 
 				btn.MouseButton1Click:Connect(function()
 					if listening then return end
@@ -825,7 +933,7 @@ function Library:CreateWindow(cfg)
 					end)
 				end)
 
-				return { Get = function() return current end }
+				return { Get=function() return current end }
 			end
 
 			return Card
@@ -838,7 +946,6 @@ function Library:CreateWindow(cfg)
 		return Tab
 	end
 
-	-- helpers
 	function Window:SetStatus(text)
 		Status.Text = tostring(text)
 	end
@@ -846,6 +953,16 @@ function Library:CreateWindow(cfg)
 	function Window:Destroy()
 		Gui:Destroy()
 	end
+
+	-- ===== Reveal with fade-in =====
+	task.delay(cfg.LoadingTime or 0.35, function()
+		Main.Visible = true
+		Main.BackgroundTransparency = 1
+		Tween(Main, 0.25, { BackgroundTransparency = 0 })
+		task.delay(0.10, function()
+			loader:FadeOut()
+		end)
+	end)
 
 	return Window
 end
